@@ -1,0 +1,12 @@
+Flask
+PyMuPDF
+python-docx
+python-pptx
+Pillow
+google-genai
+pytesseract
+requests
+sqlalchemy
+dotenv
+psycopg2-binary
+gunicorn
