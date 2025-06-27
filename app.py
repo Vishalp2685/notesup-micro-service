@@ -251,8 +251,9 @@ def download_file_from_google_drive(file_id, file_name):
             response = session.get(URL, params={'id': file_id, 'confirm': value}, stream=True)
             break
 
-    os.makedirs("temp", exist_ok=True)
-    file_path = f"temp/{file_name}"
+    temp_dir = "/tmp/notesup_temp"
+    os.makedirs(temp_dir, exist_ok=True)
+    file_path = os.path.join(temp_dir, file_name)
     
     try:
         with open(file_path, "wb") as f:
