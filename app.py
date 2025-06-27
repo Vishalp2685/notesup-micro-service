@@ -16,6 +16,7 @@ from queue import Queue
 from threading import Thread, Semaphore,Lock
 import database as db
 import requests
+import psutil
 
 # Set temp directory path early so it's available everywhere
 TEMP_DIR = os.path.join(os.path.dirname(__file__), 'temp') if platform.system() == 'Windows' else '/tmp/notesup_temp'
@@ -57,6 +58,11 @@ configure_tesseract()
 def clean_text(text):
     return re.sub(r'\s+', ' ', text).strip()
 
+def log_memory_usage(context=""):
+    process = psutil.Process(os.getpid())
+    mem_mb = process.memory_info().rss / (1024 * 1024)
+    print(f"[MEMORY] {context} - RSS: {mem_mb:.2f} MB")
+
 def extract_text_pdf_with_ocr(file_path, word_limit=200):
     try:
         doc = fitz.open(file_path)
@@ -67,14 +73,13 @@ def extract_text_pdf_with_ocr(file_path, word_limit=200):
             if not text.strip():
                 # OCR fallback
                 try:
-                    pix = page.get_pixmap(dpi=300)
+                    pix = page.get_pixmap(dpi=150)  # Lower DPI for less memory
                     image_bytes = pix.tobytes("png")
                     image = Image.open(io.BytesIO(image_bytes))
                     text = pytesseract.image_to_string(image)
                 except Exception as ocr_error:
                     print(f"OCR failed on page {page_num}: {ocr_error}")
                     continue
-
             text = clean_text(text)
             words = text.split()
             if not words:
@@ -82,6 +87,7 @@ def extract_text_pdf_with_ocr(file_path, word_limit=200):
             word_list.extend(words)
             if len(word_list) >= word_limit:
                 break
+            log_memory_usage(f"PDF OCR page {page_num}")
         return ' '.join(word_list[:word_limit])
     except Exception as e:
         print(f"Error in extract_text_pdf_with_ocr: {e}")
@@ -100,7 +106,7 @@ def extract_text_pdf_random(file_path, word_limit=1000):
             words += text.split()
             if len(words) >= word_limit:
                 break
-
+            log_memory_usage(f"PDF random page {page_num}")
         if words:
             return ' '.join(words[:word_limit])
         else:
@@ -114,20 +120,20 @@ def extract_text_pdf_random(file_path, word_limit=1000):
             for i in pages:
                 page = doc[i]
                 try:
-                    pix = page.get_pixmap(dpi=300)
+                    pix = page.get_pixmap(dpi=150)  # Lower DPI for less memory
                     image_bytes = pix.tobytes("png")
                     image = Image.open(io.BytesIO(image_bytes))
                     text = pytesseract.image_to_string(image)
                 except Exception as ocr_error:
                     print(f"OCR failed on page {i}: {ocr_error}")
                     continue
-
                 if not text.strip():
                     continue
                 text = clean_text(text)
                 words += text.split()
                 if len(words) >= word_limit:
                     break
+                log_memory_usage(f"PDF OCR fallback page {i}")
         return ' '.join(words[:word_limit]) if words else "No text found in the PDF."
     except Exception as e:
         print(f"Error in extract_text_pdf_random: {e}")
@@ -165,9 +171,16 @@ def extract_text_pptx(file_path, word_limit=200):
 
 def extract_text_txt(file_path, word_limit=200):
     try:
+        words = []
         with open(file_path, 'r', encoding='utf-8') as f:
-            text = clean_text(f.read())
-            return ' '.join(text.split()[:word_limit])
+            for line in f:
+                line = clean_text(line)
+                words += line.split()
+                if len(words) >= word_limit:
+                    break
+                if len(words) % 50 == 0:
+                    log_memory_usage(f"TXT chunk {len(words)} words")
+        return ' '.join(words[:word_limit])
     except Exception as e:
         print(f"Error in extract_text_txt: {e}")
         return ""
