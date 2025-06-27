@@ -13,13 +13,18 @@ import shutil
 from flask import Flask
 from flask import Flask,jsonify
 from queue import Queue
-from threading import Thread, Semaphore
+from threading import Thread, Semaphore,Lock
 import database as db
 import requests
 
-app = Flask(__name__)
 queue = Queue()
 semaphore = Semaphore(3)
+
+worker_active = False
+worker_lock = Lock()
+
+app = Flask(__name__)
+
 # Configure Tesseract path based on environment
 def configure_tesseract():
     """Configure Tesseract OCR path based on the operating system"""
@@ -259,6 +264,15 @@ def download_file_from_google_drive(file_id, file_name):
     except Exception as e:
         print("[✗] Error while saving the file to temp:", e)
         return None
+    
+def start_worker_if_needed():
+    global worker_active
+    with worker_lock:
+        if not worker_active:
+            thread = Thread(target=generate_description_worker, args=(queue, semaphore), daemon=True)
+            thread.start()
+            worker_active = True
+
 def process_description(note):
     file_id = note.file_path  # e.g., 'https://drive.google.com/file/d/FILE_ID/view'
     file_name = note.filename
@@ -275,17 +289,22 @@ def process_description(note):
     print(f"[✓] Summary updated for file {file_name}")
 
 def generate_description_worker(queue, semaphore):
-    while True:
-        note = queue.get()
-        with semaphore:
-            try:
-                process_description(note)
-            except Exception as e:
-                print("Error in worker:", e)
-        queue.task_done()
+    global worker_active
+    try:
+        while not queue.empty():
+            note = queue.get()
+            with semaphore:
+                try:
+                    process_description(note)
+                except Exception as e:
+                    print("Error in processing:", e)
+            queue.task_done()
+    finally:
+        with worker_lock:
+            worker_active = False
 
 @app.route('/initialize_description_worker', methods=['POST', 'GET'])
-def start_generating_description():     
+def start_generating_description():
     try:
         null_notes = db.get_null_notes()
         if not null_notes:
@@ -293,12 +312,13 @@ def start_generating_description():
 
         for note in null_notes:
             queue.put(note)
-        
+
+        start_worker_if_needed()
+
         return jsonify({"message": f"{len(null_notes)} jobs added to queue."}), 200
     except Exception as e:
         print(f"Error in start_generating_description: {e}")
         return jsonify({"message": "Failed to initialize description worker."}), 500
-
 
 @app.route('/ping')
 def ping():
