@@ -17,6 +17,7 @@ from threading import Thread, Semaphore,Lock
 import database as db
 import requests
 import psutil
+import gc
 
 # Set temp directory path early so it's available everywhere
 TEMP_DIR = os.path.join(os.path.dirname(__file__), 'temp') if platform.system() == 'Windows' else '/tmp/notesup_temp'
@@ -77,6 +78,10 @@ def extract_text_pdf_with_ocr(file_path, word_limit=200):
                     image_bytes = pix.tobytes("png")
                     image = Image.open(io.BytesIO(image_bytes))
                     text = pytesseract.image_to_string(image)
+                    image.close()
+                    del image
+                    del pix
+                    gc.collect()
                 except Exception as ocr_error:
                     print(f"OCR failed on page {page_num}: {ocr_error}")
                     continue
@@ -124,6 +129,10 @@ def extract_text_pdf_random(file_path, word_limit=1000):
                     image_bytes = pix.tobytes("png")
                     image = Image.open(io.BytesIO(image_bytes))
                     text = pytesseract.image_to_string(image)
+                    image.close()
+                    del image
+                    del pix
+                    gc.collect()
                 except Exception as ocr_error:
                     print(f"OCR failed on page {i}: {ocr_error}")
                     continue
