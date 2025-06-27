@@ -60,7 +60,7 @@ USER appuser
 COPY . .
 
 # Expose the port that the application listens on.
-EXPOSE 5000
+EXPOSE 8000
 
 # Run the application.
-CMD gunicorn 'app:app' --bind=0.0.0.0:5000
+CMD gunicorn 'app:app' --bind=0.0.0.0:8000
