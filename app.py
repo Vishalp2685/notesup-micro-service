@@ -18,7 +18,8 @@ import database as db
 import requests
 
 app = Flask(__name__)
-
+queue = Queue()
+semaphore = Semaphore(3)
 # Configure Tesseract path based on environment
 def configure_tesseract():
     """Configure Tesseract OCR path based on the operating system"""
@@ -308,9 +309,7 @@ if __name__ == "__main__":
     # Test Tesseract installation
     if not test_tesseract():
         print("Tesseract OCR is not properly installed or configured.")
-    # initilaize QUeue and Semaphore
-    queue = Queue()
-    semaphore = Semaphore(3)
+
     # Start the worker thread
     worker_thread = Thread(target=generate_description_worker, args=(queue, semaphore))
     worker_thread.start()
