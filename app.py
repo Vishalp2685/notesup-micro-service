@@ -17,8 +17,11 @@ from threading import Thread, Semaphore,Lock
 import database as db
 import requests
 
+# Set temp directory path early so it's available everywhere
+TEMP_DIR = os.path.join(os.path.dirname(__file__), 'temp') if platform.system() == 'Windows' else '/tmp/notesup_temp'
+
 queue = Queue()
-semaphore = Semaphore(3)
+semaphore = Semaphore(1)
 
 worker_active = False
 worker_lock = Lock()
@@ -251,7 +254,7 @@ def download_file_from_google_drive(file_id, file_name):
             response = session.get(URL, params={'id': file_id, 'confirm': value}, stream=True)
             break
 
-    temp_dir = "/tmp/notesup_temp"
+    temp_dir = TEMP_DIR
     os.makedirs(temp_dir, exist_ok=True)
     file_path = os.path.join(temp_dir, file_name)
     
@@ -275,7 +278,7 @@ def start_worker_if_needed():
             worker_active = True
 
 def process_description(note):
-    file_id = note.file_path  # e.g., 'https://drive.google.com/file/d/FILE_ID/view'
+    file_id = note.file_path
     file_name = note.filename
 
     temp_path = download_file_from_google_drive(file_id, file_name)
@@ -301,8 +304,18 @@ def generate_description_worker(queue, semaphore):
                     print("Error in processing:", e)
             queue.task_done()
     finally:
+        clear_temp_folder()
         with worker_lock:
             worker_active = False
+
+def clear_temp_folder():
+    if os.path.exists(TEMP_DIR):
+        try:
+            shutil.rmtree(TEMP_DIR)
+            print(f"[✓] Cleared temp folder: {TEMP_DIR}")
+        except Exception as e:
+            print(f"[✗] Failed to clear temp folder: {e}")
+    os.makedirs(TEMP_DIR, exist_ok=True)
 
 @app.route('/initialize_description_worker', methods=['POST', 'GET'])
 def start_generating_description():
@@ -330,10 +343,7 @@ if __name__ == "__main__":
     # Test Tesseract installation
     if not test_tesseract():
         print("Tesseract OCR is not properly installed or configured.")
-
-    # Start the worker thread
-    worker_thread = Thread(target=generate_description_worker, args=(queue, semaphore), daemon=True).start()
-
-    worker_thread.start()
+    clear_temp_folder()
+    
     # Start the Flask app
     app.run()
