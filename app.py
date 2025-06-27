@@ -311,7 +311,8 @@ if __name__ == "__main__":
         print("Tesseract OCR is not properly installed or configured.")
 
     # Start the worker thread
-    worker_thread = Thread(target=generate_description_worker, args=(queue, semaphore))
+    worker_thread = Thread(target=generate_description_worker, args=(queue, semaphore), daemon=True).start()
+
     worker_thread.start()
     # Start the Flask app
     app.run()
